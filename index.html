@@ -496,9 +496,16 @@ document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => switchTab(tab.dataset.tab));
 });
 
+// 브라우저가 드래그된 파일을 새 탭으로 여는 기본 동작 방지
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', e => e.preventDefault());
+
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('dragleave', e => {
+  // drop-zone 밖으로 나갔을 때만 제거 (자식 요소 이동 시 무시)
+  if (!dropZone.contains(e.relatedTarget)) dropZone.classList.remove('drag-over');
+});
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
