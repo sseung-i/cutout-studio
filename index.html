@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cutout Studio — 누끼 제거 & 이미지 변환</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f0f11;
+    --surface: #1a1a1f;
+    --surface2: #222228;
+    --border: #2e2e38;
+    --accent: #7c6af7;
+    --accent-dim: #5a4fd4;
+    --accent-glow: rgba(124, 106, 247, 0.15);
+    --text: #e8e8f0;
+    --text-dim: #888898;
+    --text-dimmer: #55556a;
+    --green: #4caf7d;
+    --red: #e05555;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── 사이드바 ── */
+  #sidebar {
+    width: 300px;
+    min-width: 300px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .sidebar-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-header h1 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+
+  .sidebar-header p {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    line-height: 1.5;
+  }
+
+  .section {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dimmer);
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+
+  /* ── 업로드 ── */
+  #drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--surface2);
+  }
+
+  #drop-zone:hover, #drop-zone.drag-over {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+
+  #drop-zone .icon { font-size: 28px; margin-bottom: 8px; opacity: 0.6; }
+  #drop-zone p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+  #drop-zone span { color: var(--accent); font-weight: 600; }
+  #file-input { display: none; }
+
+  /* ── 설정 ── */
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .setting-row:last-child { margin-bottom: 0; }
+
+  .setting-label { font-size: 13px; color: var(--text-dim); flex: 1; }
+  .setting-label small {
+    display: block;
+    font-size: 10.5px;
+    color: var(--text-dimmer);
+    margin-top: 2px;
+  }
+
+  .input-group { display: flex; align-items: center; gap: 6px; }
+
+  input[type="range"] {
+    width: 90px;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .value-badge {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-glow);
+    border: 1px solid rgba(124,106,247,0.3);
+    border-radius: 6px;
+    padding: 2px 8px;
+    min-width: 38px;
+    text-align: center;
+  }
+
+  /* ── 단계 ── */
+  .steps { display: flex; flex-direction: column; gap: 8px; }
+
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--surface2);
+    transition: all 0.2s;
+    border: 1px solid transparent;
+  }
+
+  .step.active {
+    background: var(--accent-glow);
+    border-color: rgba(124,106,247,0.3);
+  }
+
+  .step.done { opacity: 0.6; }
+
+  .step-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    background: var(--surface);
+    color: var(--text-dimmer);
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+  }
+
+  .step.active .step-icon { background: var(--accent); color: white; border-color: var(--accent); }
+  .step.done .step-icon { background: var(--green); color: white; border-color: var(--green); }
+
+  .step-text { font-size: 12.5px; color: var(--text-dim); flex: 1; }
+  .step.active .step-text { color: var(--text); }
+
+  .step-status { font-size: 10.5px; color: var(--text-dimmer); }
+  .step.active .step-status { color: var(--accent); }
+  .step.done .step-status { color: var(--green); }
+
+  /* ── 진행 바 ── */
+  .progress-bar-wrap {
+    background: var(--surface2);
+    border-radius: 4px;
+    height: 4px;
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s ease;
+  }
+
+  .progress-text {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 6px;
+    min-height: 16px;
+  }
+
+  /* ── 버튼 ── */
+  .btn {
+    width: 100%;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover:not(:disabled) {
+    background: #8d7ef9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(124,106,247,0.35);
+  }
+  .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    margin-top: 8px;
+  }
+  .btn-secondary:hover { background: var(--border); color: var(--text); }
+
+  /* ── 메인 ── */
+  #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    padding: 14px 20px 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .tab {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dimmer);
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    border-radius: 6px 6px 0 0;
+    position: relative;
+    bottom: -1px;
+  }
+  .tab:hover { color: var(--text-dim); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--accent-glow); }
+
+  .tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    font-size: 9px;
+    font-weight: 700;
+    background: var(--green);
+    color: white;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  /* ── 미리보기 ── */
+  #preview-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow: hidden;
+  }
+
+  .preview-container { display: none; width: 100%; height: 100%; align-items: center; justify-content: center; }
+  .preview-container.active { display: flex; }
+
+  .empty-state { text-align: center; color: var(--text-dimmer); }
+  .empty-state .big-icon { font-size: 48px; opacity: 0.3; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; }
+
+  .preview-img-wrap {
+    position: relative;
+    max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .preview-img-wrap img, .preview-img-wrap canvas {
+    max-width: 100%;
+    max-height: calc(100vh - 180px);
+    border-radius: 8px;
+    object-fit: contain;
+    display: block;
+  }
+
+  .checker-bg {
+    background-image:
+      linear-gradient(45deg, #2a2a35 25%, transparent 25%),
+      linear-gradient(-45deg, #2a2a35 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #2a2a35 75%),
+      linear-gradient(-45deg, transparent 75%, #2a2a35 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+    background-color: #1e1e28;
+    border-radius: 8px;
+  }
+
+  .img-info {
+    position: absolute;
+    bottom: -28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--text-dimmer);
+    white-space: nowrap;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .pulsing { animation: pulse 1.4s ease-in-out infinite; }
+
+  #sidebar::-webkit-scrollbar { width: 4px; }
+  #sidebar::-webkit-scrollbar-track { background: transparent; }
+  #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <div class="sidebar-header">
+    <h1>✂️ Cutout Studio</h1>
+    <p>이미지 배경 제거 → Tight Crop →<br>3000×3000px 투명 PNG 출력</p>
+  </div>
+
+  <div class="section">
+    <div class="section-label">이미지 업로드</div>
+    <div id="drop-zone">
+      <div class="icon">🖼️</div>
+      <p><span>클릭</span>하거나 파일을 여기에<br>드래그 앤 드롭하세요</p>
+      <p style="font-size:11px;margin-top:6px;color:var(--text-dimmer)">PNG · JPG 지원</p>
+    </div>
+    <input type="file" id="file-input" accept="image/png,image/jpeg,image/jpg">
+  </div>
+
+  <div class="section">
+    <div class="section-label">변환 설정</div>
+    <div class="setting-row">
+      <div class="setting-label">
+        여백 (Padding)
+        <small>피사체 주변 여백 크기</small>
+      </div>
+      <div class="input-group">
+        <input type="range" id="padding-slider" min="0" max="150" value="40">
+        <div class="value-badge" id="padding-value">40px</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">처리 단계</div>
+    <div class="steps">
+      <div class="step" id="step-upload">
+        <div class="step-icon">1</div>
+        <div class="step-text">이미지 업로드</div>
+        <div class="step-status">대기</div>
+      </div>
+      <div class="step" id="step-remove">
+        <div class="step-icon">2</div>
+        <div class="step-text">배경 제거 (AI)</div>
+        <div class="step-status">대기</div>
+      </div>
+      <div class="step" id="step-crop">
+        <div class="step-icon">3</div>
+        <div class="step-text">Tight Crop</div>
+        <div class="step-status">대기</div>
+      </div>
+      <div class="step" id="step-export">
+        <div class="step-icon">4</div>
+        <div class="step-text">3000px 출력</div>
+        <div class="step-status">대기</div>
+      </div>
+    </div>
+    <div id="progress-wrap" style="margin-top:12px;display:none">
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      <div class="progress-text" id="progress-text"></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-label">출력</div>
+    <button class="btn btn-primary" id="btn-process" disabled>
+      <span id="btn-label">이미지를 먼저 업로드하세요</span>
+    </button>
+    <button class="btn btn-secondary" id="btn-download" style="display:none">⬇️ PNG 다운로드</button>
+    <button class="btn btn-secondary" id="btn-reset" style="display:none">🔄 다시 시작</button>
+  </div>
+
+  <div class="section" style="border-bottom:none">
+    <div class="section-label">출력 스펙</div>
+    <div style="font-size:11.5px;color:var(--text-dimmer);line-height:1.8">
+      📐 3000 × 3000px<br>
+      🎨 투명 배경 (PNG)<br>
+      📁 cutout_3000px.png<br>
+      🤖 AI 배경 제거 (@imgly)
+    </div>
+  </div>
+</aside>
+
+<main id="main">
+  <div class="tabs">
+    <button class="tab active" data-tab="original">원본</button>
+    <button class="tab" data-tab="removed">누끼 제거 <span class="tab-badge" id="badge-removed" style="display:none">✓</span></button>
+    <button class="tab" data-tab="final">최종 출력 <span class="tab-badge" id="badge-final" style="display:none">✓</span></button>
+  </div>
+
+  <div id="preview-area">
+    <div class="preview-container active" id="tab-original">
+      <div class="empty-state">
+        <div class="big-icon">🖼️</div>
+        <p>이미지를 업로드하면 여기에 미리보기가 표시됩니다.</p>
+      </div>
+    </div>
+    <div class="preview-container" id="tab-removed">
+      <div class="empty-state">
+        <div class="big-icon">✂️</div>
+        <p>배경 제거 후 여기에 결과가 표시됩니다.</p>
+      </div>
+    </div>
+    <div class="preview-container" id="tab-final">
+      <div class="empty-state">
+        <div class="big-icon">🎯</div>
+        <p>변환 완료 후 최종 출력물이 표시됩니다.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import { removeBackground } from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/browser/index.mjs';
+
+let originalFile = null;
+let removedBlob = null;
+let finalCanvas = null;
+let isProcessing = false;
+
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const paddingSlider = document.getElementById('padding-slider');
+const paddingValue = document.getElementById('padding-value');
+const btnProcess = document.getElementById('btn-process');
+const btnDownload = document.getElementById('btn-download');
+const btnReset = document.getElementById('btn-reset');
+const btnLabel = document.getElementById('btn-label');
+const progressWrap = document.getElementById('progress-wrap');
+const progressBar = document.getElementById('progress-bar');
+const progressText = document.getElementById('progress-text');
+
+paddingSlider.addEventListener('input', () => {
+  paddingValue.textContent = paddingSlider.value + 'px';
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => switchTab(tab.dataset.tab));
+});
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && (file.type === 'image/png' || file.type === 'image/jpeg')) loadFile(file);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+function loadFile(file) {
+  originalFile = file;
+  removedBlob = null;
+  finalCanvas = null;
+
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    document.getElementById('tab-original').innerHTML = `
+      <div class="preview-img-wrap">
+        <img src="${url}" alt="원본">
+        <div class="img-info">${img.naturalWidth} × ${img.naturalHeight}px · ${(file.size/1024).toFixed(0)}KB</div>
+      </div>`;
+  };
+  img.src = url;
+
+  document.getElementById('tab-removed').innerHTML = `
+    <div class="empty-state"><div class="big-icon pulsing">✂️</div><p>변환 시작 버튼을 눌러주세요.</p></div>`;
+  document.getElementById('tab-final').innerHTML = `
+    <div class="empty-state"><div class="big-icon">🎯</div><p>변환 완료 후 표시됩니다.</p></div>`;
+  document.getElementById('badge-removed').style.display = 'none';
+  document.getElementById('badge-final').style.display = 'none';
+
+  switchTab('original');
+  resetSteps();
+  setStep('step-upload', 'done', '완료');
+
+  btnProcess.disabled = false;
+  btnLabel.textContent = '🚀 변환 시작';
+  btnDownload.style.display = 'none';
+  btnReset.style.display = 'none';
+  progressWrap.style.display = 'none';
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.preview-container').forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+}
+
+function resetSteps() {
+  const nums = { 'step-upload': '1', 'step-remove': '2', 'step-crop': '3', 'step-export': '4' };
+  Object.entries(nums).forEach(([id, n]) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active', 'done');
+    el.querySelector('.step-status').textContent = '대기';
+    el.querySelector('.step-icon').textContent = n;
+  });
+}
+
+function setStep(id, state, statusText) {
+  const el = document.getElementById(id);
+  el.classList.remove('active', 'done');
+  if (state) el.classList.add(state);
+  el.querySelector('.step-status').textContent = statusText;
+  el.querySelector('.step-icon').textContent = state === 'done' ? '✓' : state === 'active' ? '▶' :
+    { 'step-upload': '1', 'step-remove': '2', 'step-crop': '3', 'step-export': '4' }[id];
+}
+
+function setProgress(pct, text) {
+  progressWrap.style.display = 'block';
+  progressBar.style.width = pct + '%';
+  progressText.textContent = text;
+}
+
+btnProcess.addEventListener('click', async () => {
+  if (!originalFile || isProcessing) return;
+  isProcessing = true;
+  btnProcess.disabled = true;
+  btnDownload.style.display = 'none';
+  btnReset.style.display = 'none';
+
+  try {
+    setStep('step-remove', 'active', '처리 중...');
+    setProgress(5, 'AI 모델 초기화 중... (첫 실행 시 수십 초 소요)');
+    btnLabel.innerHTML = '<span class="spinner"></span> AI 배경 제거 중...';
+    switchTab('removed');
+
+    removedBlob = await removeBackground(originalFile, {
+      publicPath: 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/dist/browser/',
+      progress: (key, current, total) => {
+        if (total > 0) {
+          const pct = Math.round((current / total) * 60) + 5;
+          const label = key.includes('fetch') ? '모델 다운로드 중...' :
+                        key.includes('load')  ? '모델 로딩 중...' : '배경 제거 처리 중...';
+          setProgress(pct, label);
+        }
+      },
+    });
+
+    setStep('step-remove', 'done', '완료');
+    setProgress(70, '배경 제거 완료');
+    document.getElementById('badge-removed').style.display = 'inline-flex';
+
+    const removedUrl = URL.createObjectURL(removedBlob);
+    document.getElementById('tab-removed').innerHTML = `
+      <div class="preview-img-wrap checker-bg" style="padding:12px">
+        <img src="${removedUrl}" alt="배경 제거">
+      </div>`;
+
+    setStep('step-crop', 'active', '처리 중...');
+    setProgress(75, '피사체 영역 감지 중...');
+    btnLabel.innerHTML = '<span class="spinner"></span> Crop 처리 중...';
+
+    const croppedCanvas = await tightCrop(removedBlob);
+    setStep('step-crop', 'done', '완료');
+    setProgress(85, 'Crop 완료');
+
+    setStep('step-export', 'active', '처리 중...');
+    setProgress(90, '최종 캔버스 생성 중...');
+    btnLabel.innerHTML = '<span class="spinner"></span> 최종 출력 생성 중...';
+
+    finalCanvas = exportTo3000(croppedCanvas, parseInt(paddingSlider.value));
+    setStep('step-export', 'done', '완료');
+    setProgress(100, '✅ 변환 완료!');
+    document.getElementById('badge-final').style.display = 'inline-flex';
+
+    // 최종 미리보기 (축소 렌더)
+    const scale = Math.min(800 / 3000, 800 / 3000);
+    const pw = Math.round(3000 * scale);
+    const ph = Math.round(3000 * scale);
+    const previewCanvas = document.createElement('canvas');
+    previewCanvas.width = pw;
+    previewCanvas.height = ph;
+    previewCanvas.getContext('2d').drawImage(finalCanvas, 0, 0, pw, ph);
+
+    document.getElementById('tab-final').innerHTML = `
+      <div class="preview-img-wrap checker-bg" style="padding:12px">
+        <canvas id="final-preview" width="${pw}" height="${ph}"></canvas>
+        <div class="img-info">3000 × 3000px · 투명 PNG (미리보기 축소)</div>
+      </div>`;
+    document.getElementById('final-preview').getContext('2d').drawImage(previewCanvas, 0, 0);
+
+    switchTab('final');
+    btnLabel.textContent = '✅ 변환 완료';
+    btnDownload.style.display = 'flex';
+    btnReset.style.display = 'flex';
+
+  } catch (err) {
+    console.error(err);
+    setProgress(0, '❌ 오류: ' + err.message);
+    btnLabel.textContent = '오류 발생 — 다시 시도';
+    btnProcess.disabled = false;
+  } finally {
+    isProcessing = false;
+  }
+});
+
+function tightCrop(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth;
+      c.height = img.naturalHeight;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+
+      const { data, width, height } = ctx.getImageData(0, 0, c.width, c.height);
+      let minX = width, minY = height, maxX = 0, maxY = 0;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (data[(y * width + x) * 4 + 3] > 10) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (maxX <= minX || maxY <= minY) { resolve(c); return; }
+
+      const out = document.createElement('canvas');
+      out.width = maxX - minX + 1;
+      out.height = maxY - minY + 1;
+      out.getContext('2d').drawImage(c, minX, minY, out.width, out.height, 0, 0, out.width, out.height);
+      URL.revokeObjectURL(url);
+      resolve(out);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function exportTo3000(croppedCanvas, padding) {
+  const OUTPUT = 3000;
+  const out = document.createElement('canvas');
+  out.width = OUTPUT;
+  out.height = OUTPUT;
+  const ctx = out.getContext('2d');
+  ctx.clearRect(0, 0, OUTPUT, OUTPUT);
+
+  const available = OUTPUT - padding * 2;
+  const scale = Math.min(available / croppedCanvas.width, available / croppedCanvas.height, 1);
+  const dw = Math.round(croppedCanvas.width * scale);
+  const dh = Math.round(croppedCanvas.height * scale);
+  ctx.drawImage(croppedCanvas, Math.round((OUTPUT - dw) / 2), Math.round((OUTPUT - dh) / 2), dw, dh);
+  return out;
+}
+
+btnDownload.addEventListener('click', () => {
+  if (!finalCanvas) return;
+  finalCanvas.toBlob(blob => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'cutout_3000px.png';
+    a.click();
+  }, 'image/png');
+});
+
+btnReset.addEventListener('click', () => {
+  originalFile = null;
+  removedBlob = null;
+  finalCanvas = null;
+  fileInput.value = '';
+  resetSteps();
+  btnProcess.disabled = true;
+  btnLabel.textContent = '이미지를 먼저 업로드하세요';
+  btnDownload.style.display = 'none';
+  btnReset.style.display = 'none';
+  progressWrap.style.display = 'none';
+  document.getElementById('tab-original').innerHTML = `<div class="empty-state"><div class="big-icon">🖼️</div><p>이미지를 업로드하면 여기에 미리보기가 표시됩니다.</p></div>`;
+  document.getElementById('tab-removed').innerHTML = `<div class="empty-state"><div class="big-icon">✂️</div><p>배경 제거 후 여기에 결과가 표시됩니다.</p></div>`;
+  document.getElementById('tab-final').innerHTML = `<div class="empty-state"><div class="big-icon">🎯</div><p>변환 완료 후 최종 출력물이 표시됩니다.</p></div>`;
+  document.getElementById('badge-removed').style.display = 'none';
+  document.getElementById('badge-final').style.display = 'none';
+  switchTab('original');
+});
+</script>
+</body>
+</html>
